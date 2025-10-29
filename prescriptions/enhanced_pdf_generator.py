@@ -483,8 +483,8 @@ class WPDFGenerator:
                 # Dosage column - M-A-E format
                 dosage = f"{med.morning_dose}-{med.afternoon_dose}-{med.evening_dose}"
                 
-                # Duration-Freq-Instructions column - show duration, frequency, timing, and instructions
-                duration_freq_instructions = []
+                # Duration-Freq column - show duration, frequency, timing (instructions shown on separate line)
+                duration_freq = []
                 
                 # Duration
                 duration = ""
@@ -498,12 +498,12 @@ class WPDFGenerator:
                     duration = "Continuous"
                 
                 if duration:
-                    duration_freq_instructions.append(duration)
+                    duration_freq.append(duration)
                 
                 # Frequency
                 frequency = med.get_frequency_display() if hasattr(med, 'get_frequency_display') else (med.frequency or "")
                 if frequency:
-                    duration_freq_instructions.append(frequency)
+                    duration_freq.append(frequency)
                 
                 # Timing details (moved from medicine column)
                 # Use timing_display_text if available, otherwise fall back to single timing
@@ -512,11 +512,10 @@ class WPDFGenerator:
                 elif med.timing:
                     timing_display = med.get_timing_display() if hasattr(med, 'get_timing_display') else med.timing
                     if timing_display:
-                        duration_freq_instructions.append(timing_display)
+                        duration_freq.append(timing_display)
                 
-                # Special instructions
-                if med.special_instructions:
-                    duration_freq_instructions.append(med.special_instructions)
+                # Special instructions drawn on a new line under duration|freq|timing
+                special_instructions_text = med.special_instructions or ""
                 
                 # Draw medicine column (multi-line)
                 medicine_y = y_pos
@@ -546,16 +545,27 @@ class WPDFGenerator:
                         lines.append(current)
                     return lines
 
-                duration_freq_instructions_text = " | ".join(duration_freq_instructions)
+                # First line: duration | freq | timing
+                duration_freq_text = " | ".join([p for p in duration_freq if p])
                 max_text_width = (self.width - 40) - col3_x
-                wrapped_lines = wrap_text(duration_freq_instructions_text, max_text_width)
+                wrapped_info_lines = wrap_text(duration_freq_text, max_text_width)
                 instr_y = y_pos
-                for line in wrapped_lines:
+                for line in wrapped_info_lines:
                     self.c.drawString(col3_x, instr_y, line)
                     instr_y -= 10
+
+                # Second line: instructions (if any)
+                wrapped_instr_lines = []
+                if special_instructions_text:
+                    # prefix label optional
+                    instructions_full = special_instructions_text
+                    wrapped_instr_lines = wrap_text(instructions_full, max_text_width)
+                    for line in wrapped_instr_lines:
+                        self.c.drawString(col3_x, instr_y, line)
+                        instr_y -= 10
                 
                 # Calculate row height first
-                rows_needed = max(1, len(medicine_lines), len(wrapped_lines))
+                rows_needed = max(1, len(medicine_lines), len(wrapped_info_lines) + (len(wrapped_instr_lines) if special_instructions_text else 0))
                 row_height = rows_needed * 10
                 
                 # Move y_pos down to account for the content we just drew
