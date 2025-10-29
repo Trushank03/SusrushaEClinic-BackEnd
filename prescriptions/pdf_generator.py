@@ -223,6 +223,17 @@ class ProfessionalPrescriptionPDFGenerator:
             spaceAfter=6,
             alignment=TA_JUSTIFY
         )
+
+        # Style for table cells with long medication instructions to ensure proper wrapping
+        wrap_style = ParagraphStyle(
+            'WrapStyle',
+            parent=normal_style,
+            fontSize=9,
+            leading=12,
+            wordWrap='CJK',  # better wrapping for long/continuous words
+            allowWidows=1,
+            allowOrphans=1,
+        )
         
         # Build content
         content = []
@@ -371,7 +382,7 @@ class ProfessionalPrescriptionPDFGenerator:
                 if medication.special_instructions:
                     medicine_info.append(f"Notes: {medication.special_instructions}")
                 
-                medicine_text = "\n".join(medicine_info)
+                medicine_text = "<br/>".join(medicine_info)
                 
                 # Timing-Freq-Duration column
                 timing_freq_duration = []
@@ -399,14 +410,16 @@ class ProfessionalPrescriptionPDFGenerator:
                 
                 timing_freq_duration_text = " | ".join(timing_freq_duration)
                 
+                # Use Paragraphs to ensure proper wrapping instead of clipping/truncation
                 med_data.append([
-                    medicine_text,
-                    dosage,
-                    timing_freq_duration_text
+                    Paragraph(medicine_text, wrap_style),
+                    Paragraph(dosage, wrap_style),
+                    Paragraph(timing_freq_duration_text, wrap_style)
                 ])
             
             # Updated table with horizontal lines only (no vertical borders)
-            med_table = Table(med_data, colWidths=[3*inch, 1*inch, 2.5*inch])
+            # Slightly widen the first and third columns to reduce wrapping/ellipsis
+            med_table = Table(med_data, colWidths=[3.2*inch, 1*inch, 2.8*inch])
             med_table.setStyle(TableStyle([
                 ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
                 ('FONTNAME', (0, 1), (-1, -1), 'Helvetica'),
@@ -419,6 +432,10 @@ class ProfessionalPrescriptionPDFGenerator:
                 ('TEXTCOLOR', (0, 0), (-1, 0), colors.white),
                 ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.white, self.light_gray]),
                 ('ALIGN', (1, 0), (1, -1), 'CENTER'),  # Dosage column center aligned
+                ('LEFTPADDING', (0, 0), (-1, -1), 4),
+                ('RIGHTPADDING', (0, 0), (-1, -1), 4),
+                ('TOPPADDING', (0, 0), (-1, -1), 4),
+                ('BOTTOMPADDING', (0, 0), (-1, -1), 6),
             ]))
             content.append(med_table)
             content.append(Spacer(1, 15))
