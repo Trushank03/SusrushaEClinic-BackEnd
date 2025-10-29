@@ -145,6 +145,45 @@ class ConsultationCreateDynamicSerializer(serializers.ModelSerializer):
             'consultation_fee', 'clinic_id', 'payment_method', 'payment_status'
         ]
     
+    def validate(self, data):
+        """Validate that the doctor is not double-booked"""
+        from datetime import datetime, timedelta
+        
+        doctor = data.get('doctor')
+        scheduled_date = data.get('scheduled_date')
+        scheduled_time = data.get('scheduled_time')
+        duration = data.get('duration', 15)  # Default 15 minutes if not provided
+        
+        if doctor and scheduled_date and scheduled_time:
+            # Calculate end time
+            start_datetime = datetime.combine(scheduled_date, scheduled_time)
+            end_datetime = start_datetime + timedelta(minutes=duration)
+            end_time = end_datetime.time()
+            
+            # Check for existing consultations that overlap with this time slot
+            overlapping_consultations = Consultation.objects.filter(
+                doctor=doctor,
+                scheduled_date=scheduled_date,
+                status__in=['scheduled', 'in_progress', 'confirmed', 'completed']
+            ).exclude(
+                # Exclude the current consultation if we're updating
+                id=self.instance.id if self.instance else None
+            )
+            
+            for existing_consultation in overlapping_consultations:
+                existing_start = existing_consultation.scheduled_time
+                existing_end = (datetime.combine(scheduled_date, existing_start) + 
+                              timedelta(minutes=existing_consultation.duration)).time()
+                
+                # Check if time ranges overlap
+                if (scheduled_time < existing_end and end_time > existing_start):
+                    clinic_name = existing_consultation.clinic.name if existing_consultation.clinic else 'Unknown Clinic'
+                    raise serializers.ValidationError({
+                        'scheduled_time': f'Doctor is already booked from {existing_start} to {existing_end} in {clinic_name}. Please choose a different time slot.'
+                    })
+        
+        return data
+
     def create(self, validated_data):
         """Create consultation without requiring a pre-existing slot"""
         print(f"🔍 ConsultationCreateDynamicSerializer.create called with: {validated_data}")
