@@ -529,14 +529,33 @@ class WPDFGenerator:
                 # Draw dosage column
                 self.c.drawString(col2_x, y_pos, dosage)
                 
-                # Draw duration-freq-instructions column
+                # Draw duration-freq-instructions column with wrapping instead of truncation
+                def wrap_text(text, max_width, font_name="Helvetica", font_size=8):
+                    self.c.setFont(font_name, font_size)
+                    words = text.split(' ')
+                    lines, current = [], ""
+                    for w in words:
+                        trial = (current + " " + w).strip()
+                        if self.c.stringWidth(trial, font_name, font_size) <= max_width:
+                            current = trial
+                        else:
+                            if current:
+                                lines.append(current)
+                            current = w
+                    if current:
+                        lines.append(current)
+                    return lines
+
                 duration_freq_instructions_text = " | ".join(duration_freq_instructions)
-                if len(duration_freq_instructions_text) > 50:  # Increased from 35
-                    duration_freq_instructions_text = duration_freq_instructions_text[:47] + "..."
-                self.c.drawString(col3_x, y_pos, duration_freq_instructions_text)
+                max_text_width = (self.width - 40) - col3_x
+                wrapped_lines = wrap_text(duration_freq_instructions_text, max_text_width)
+                instr_y = y_pos
+                for line in wrapped_lines:
+                    self.c.drawString(col3_x, instr_y, line)
+                    instr_y -= 10
                 
                 # Calculate row height first
-                rows_needed = len(medicine_lines)
+                rows_needed = max(1, len(medicine_lines), len(wrapped_lines))
                 row_height = rows_needed * 10
                 
                 # Move y_pos down to account for the content we just drew
