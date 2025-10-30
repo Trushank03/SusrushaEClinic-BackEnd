@@ -55,6 +55,10 @@ custom_urlpatterns = [
     path('investigations/tests/', InvestigationViewSet.as_view({
         'get': 'tests'
     }), name='investigation-tests'),
+    path('investigations/tests/<int:pk>/', InvestigationViewSet.as_view({
+        'patch': 'update_test',
+        'delete': 'delete_test'
+    }), name='investigation-test-detail'),
     path('investigations/auto-create/', InvestigationViewSet.as_view({
         'post': 'auto_create_test'
     }), name='investigation-auto-create'),

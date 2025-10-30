@@ -1110,6 +1110,72 @@ class InvestigationViewSet(viewsets.ModelViewSet):
             'data': serializer.data,
             'message': 'Tests retrieved successfully'
         })
+
+    def update_test(self, request, pk=None):
+        """Update an existing investigation test (partial update allowed)."""
+        try:
+            test = InvestigationTest.objects.get(id=pk)
+        except InvestigationTest.DoesNotExist:
+            return Response({
+                'success': False,
+                'error': {'code': 'NOT_FOUND', 'message': 'Test not found'}
+            }, status=status.HTTP_404_NOT_FOUND)
+
+        # Only allow superadmin/admin to update tests
+        user = request.user
+        if not user.is_authenticated or user.role not in ['superadmin', 'admin']:
+            return Response({
+                'success': False,
+                'error': {'code': 'PERMISSION_DENIED', 'message': 'Only admin/superadmin can update tests'}
+            }, status=status.HTTP_403_FORBIDDEN)
+
+        allowed_fields = ['name', 'code', 'description', 'normal_range', 'unit', 'is_fasting_required', 'preparation_instructions', 'estimated_cost', 'is_active', 'order', 'category_id']
+        data = {k: v for k, v in request.data.items() if k in allowed_fields}
+
+        # Handle category change
+        category_id = data.pop('category_id', None)
+        if category_id is not None:
+            try:
+                category = InvestigationCategory.objects.get(id=category_id)
+                test.category = category
+            except InvestigationCategory.DoesNotExist:
+                return Response({
+                    'success': False,
+                    'error': {'code': 'INVALID_CATEGORY', 'message': 'Invalid category_id'}
+                }, status=status.HTTP_400_BAD_REQUEST)
+
+        for field, value in data.items():
+            setattr(test, field, value)
+        test.save()
+
+        return Response({
+            'success': True,
+            'data': InvestigationTestSerializer(test).data,
+            'message': 'Test updated successfully'
+        }, status=status.HTTP_200_OK)
+
+    def delete_test(self, request, pk=None):
+        """Delete an investigation test."""
+        try:
+            test = InvestigationTest.objects.get(id=pk)
+        except InvestigationTest.DoesNotExist:
+            return Response({
+                'success': False,
+                'error': {'code': 'NOT_FOUND', 'message': 'Test not found'}
+            }, status=status.HTTP_404_NOT_FOUND)
+
+        user = request.user
+        if not user.is_authenticated or user.role not in ['superadmin', 'admin']:
+            return Response({
+                'success': False,
+                'error': {'code': 'PERMISSION_DENIED', 'message': 'Only admin/superadmin can delete tests'}
+            }, status=status.HTTP_403_FORBIDDEN)
+
+        test.delete()
+        return Response({
+            'success': True,
+            'message': 'Test deleted successfully'
+        }, status=status.HTTP_200_OK)
     
     @action(detail=False, methods=['post'], url_path='auto-create')
     def auto_create_test(self, request):
