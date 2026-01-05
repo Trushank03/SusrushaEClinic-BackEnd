@@ -20,6 +20,9 @@ urlpatterns = [
     path('<str:patient_id>/medical-records/', 
          views.PatientMedicalRecordViewSet.as_view({'get': 'list', 'post': 'create'}), 
          name='patient-medical-records'),
+    path('<str:patient_id>/medical-records/bulk/', 
+         views.PatientMedicalRecordViewSet.as_view({'post': 'bulk_create'}), 
+         name='patient-medical-records-bulk'),
     path('<str:patient_id>/medical-records/<int:pk>/', 
          views.PatientMedicalRecordViewSet.as_view({
              'get': 'retrieve', 'put': 'update', 'patch': 'partial_update', 'delete': 'destroy'

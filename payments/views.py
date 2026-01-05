@@ -32,6 +32,7 @@ from .serializers import (
     PaymentProcessSerializer, DiscountValidationSerializer,
     PaymentWebhookSerializer
 )
+from .phonepe_service import PhonePeService
 
 
 class PaymentPagination(PageNumberPagination):
@@ -177,18 +178,28 @@ class PaymentViewSet(ModelViewSet):
                 result = self._process_razorpay_payment(payment, serializer.validated_data)
             elif gateway == 'payu':
                 result = self._process_payu_payment(payment, serializer.validated_data)
+            elif gateway == 'phonepe':
+                result = self._process_phonepe_payment(payment, serializer.validated_data)
             else:
                 raise ValueError(f"Unsupported gateway: {gateway}")
             
             # Update payment status based on result
+            # For PhonePe, status might be 'processing' initially (requires user redirect)
             if result['success']:
-                payment.status = 'completed'
-                payment.processed_at = timezone.now()
-                payment.gateway_transaction_id = result.get('transaction_id')
+                # PhonePe returns a payment URL that needs user interaction
+                if gateway == 'phonepe' and result.get('payment_url'):
+                    payment.status = 'processing'
+                    payment.gateway_name = 'phonepe'
+                else:
+                    payment.status = 'completed'
+                    payment.processed_at = timezone.now()
+                
+                payment.gateway_transaction_id = result.get('transaction_id') or result.get('merchant_transaction_id')
                 payment.gateway_response = result.get('response', {})
             else:
                 payment.status = 'failed'
-                payment.gateway_response = result.get('error', {})
+                payment.failure_reason = result.get('error', 'Payment processing failed')
+                payment.gateway_response = {'error': result.get('error', {})}
             
             payment.save()
             
@@ -257,6 +268,34 @@ class PaymentViewSet(ModelViewSet):
             'payment_url': f"https://secure.payu.in/_payment/{uuid.uuid4().hex}",
             'response': {'status': 'success', 'gateway': 'payu'}
         }
+    
+    def _process_phonepe_payment(self, payment, data):
+        """Process payment via PhonePe"""
+        phonepe_service = PhonePeService()
+        
+        # Get customer information from payment
+        customer_info = {
+            'mobile': getattr(payment.patient, 'phone', '') or getattr(payment.patient, 'phone_number', '') or '',
+            'email': getattr(payment.patient, 'email', '') or '',
+            'name': getattr(payment.patient, 'name', '') or getattr(payment.patient, 'full_name', '') or ''
+        }
+        
+        # Prepare additional info
+        additional_info = {
+            'payment_type': payment.payment_type,
+            'description': payment.description,
+            'consultation_id': str(payment.consultation.id) if payment.consultation else None
+        }
+        
+        # Initiate payment
+        result = phonepe_service.initiate_payment(
+            payment_id=payment.id,
+            amount=float(payment.net_amount),
+            customer_info=customer_info,
+            additional_info=additional_info
+        )
+        
+        return result
     
     @action(detail=True, methods=['post'])
     def refund(self, request, pk=None):
@@ -639,6 +678,143 @@ class DiscountValidationView(APIView):
                 },
                 'timestamp': timezone.now().isoformat()
             }, status=status.HTTP_400_BAD_REQUEST)
+
+
+class PhonePeCallbackView(APIView):
+    """Handle PhonePe payment callback/webhook"""
+    permission_classes = []  # No authentication required for webhooks
+    
+    def post(self, request):
+        """Handle PhonePe callback"""
+        try:
+            phonepe_service = PhonePeService()
+            
+            # Get X-VERIFY header for signature verification
+            x_verify_header = request.headers.get('X-VERIFY', '')
+            
+            # PhonePe sends base64 encoded response in request body
+            webhook_data = request.data
+            
+            # Process webhook
+            result = phonepe_service.process_webhook(webhook_data, x_verify_header)
+            
+            if not result['success']:
+                return Response({
+                    'success': False,
+                    'error': result.get('error', 'Invalid webhook')
+                }, status=status.HTTP_400_BAD_REQUEST)
+            
+            # Find payment by merchant transaction ID
+            merchant_transaction_id = result.get('merchant_transaction_id')
+            payment = Payment.objects.filter(gateway_transaction_id=merchant_transaction_id).first()
+            
+            if not payment:
+                return Response({
+                    'success': False,
+                    'error': 'Payment not found'
+                }, status=status.HTTP_404_NOT_FOUND)
+            
+            # Update payment status based on PhonePe response
+            status_mapping = {
+                'SUCCESS': 'completed',
+                'PENDING': 'processing',
+                'FAILURE': 'failed',
+                'CANCELLED': 'cancelled'
+            }
+            
+            phonepe_status = result.get('status', '').upper()
+            payment.status = status_mapping.get(phonepe_status, 'failed')
+            
+            if payment.status == 'completed':
+                payment.processed_at = timezone.now()
+                payment.completed_at = timezone.now()
+            elif payment.status == 'failed':
+                payment.failed_at = timezone.now()
+                payment.failure_reason = result.get('response_code', 'Payment failed')
+                payment.failure_code = result.get('code', '')
+            
+            payment.gateway_response = result.get('response', {})
+            payment.save()
+            
+            # Create transaction record
+            PaymentTransaction.objects.create(
+                payment=payment,
+                transaction_type='webhook',
+                amount=payment.amount,
+                is_successful=payment.status == 'completed',
+                gateway_transaction_id=result.get('transaction_id', merchant_transaction_id),
+                gateway_response=result.get('response', {}),
+            )
+            
+            return Response({
+                'success': True,
+                'message': 'PhonePe callback processed successfully'
+            }, status=status.HTTP_200_OK)
+            
+        except Exception as e:
+            return Response({
+                'success': False,
+                'error': f'Error processing PhonePe callback: {str(e)}'
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+    
+    def get(self, request):
+        """Handle PhonePe redirect callback (GET request after payment)"""
+        try:
+            merchant_transaction_id = request.query_params.get('merchantTransactionId') or request.query_params.get('transaction_id')
+            
+            if not merchant_transaction_id:
+                return Response({
+                    'success': False,
+                    'error': 'Missing transaction ID'
+                }, status=status.HTTP_400_BAD_REQUEST)
+            
+            # Find payment
+            payment = Payment.objects.filter(gateway_transaction_id=merchant_transaction_id).first()
+            
+            if not payment:
+                return Response({
+                    'success': False,
+                    'error': 'Payment not found'
+                }, status=status.HTTP_404_NOT_FOUND)
+            
+            # Check payment status with PhonePe API
+            phonepe_service = PhonePeService()
+            status_result = phonepe_service.check_payment_status(merchant_transaction_id)
+            
+            if status_result['success']:
+                status_mapping = {
+                    'SUCCESS': 'completed',
+                    'PENDING': 'processing',
+                    'FAILURE': 'failed',
+                    'CANCELLED': 'cancelled'
+                }
+                
+                phonepe_status = status_result.get('status', '').upper()
+                payment.status = status_mapping.get(phonepe_status, 'failed')
+                
+                if payment.status == 'completed':
+                    payment.processed_at = timezone.now()
+                    payment.completed_at = timezone.now()
+                elif payment.status == 'failed':
+                    payment.failed_at = timezone.now()
+                    payment.failure_reason = status_result.get('code', 'Payment failed')
+                
+                payment.gateway_response = status_result.get('response', {})
+                payment.save()
+            
+            # Return payment status
+            serializer = PaymentSerializer(payment)
+            return Response({
+                'success': True,
+                'data': serializer.data,
+                'payment_status': payment.status
+            }, status=status.HTTP_200_OK)
+            
+        except Exception as e:
+            return Response({
+                'success': False,
+                'error': f'Error processing redirect: {str(e)}'
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
 class PaymentWebhookView(APIView):

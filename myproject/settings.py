@@ -317,9 +317,19 @@ PHONEPE_PROD_SALT_KEY = "2f031cba-3c25-4c5f-9f8a-f92a8bf7d459"
 PHONEPE_PROD_SALT_INDEX = "1"
 PHONEPE_PROD_PAY_URL = "https://api.phonepe.com/apis/hermes/pg/v1/pay"
 
-# File Upload Configuration
-FILE_UPLOAD_MAX_MEMORY_SIZE = 20 * 1024 * 1024  # 20MB (increased from 10MB)
-DATA_UPLOAD_MAX_MEMORY_SIZE = 20 * 1024 * 1024  # 20MB (increased from 10MB)
+# PhonePe Business API Credentials (for Developer Settings/API Keys)
+PHONEPE_CLIENT_ID = os.environ.get('PHONEPE_CLIENT_ID', 'M237Y0F2LTMHC_2512111106')
+PHONEPE_CLIENT_SECRET = os.environ.get('PHONEPE_CLIENT_SECRET', 'NzE5N2JIMjItYzU5Ni00MzRhLTg0ZWMtZmEwNzY0YjZINmI3')
+PHONEPE_BUSINESS_API_BASE_URL = os.environ.get('PHONEPE_BUSINESS_API_BASE_URL', 'https://api.phonepe.com/apis/pg/v1')
+
+# PhonePe Configuration
+PHONEPE_ENVIRONMENT = os.environ.get('PHONEPE_ENVIRONMENT', 'sandbox')  # 'sandbox' or 'production'
+PHONEPE_CALLBACK_URL = os.environ.get('PHONEPE_CALLBACK_URL', 'https://sushrusaeclinic.com/api/payments/phonepe/callback/')
+PHONEPE_REDIRECT_URL = os.environ.get('PHONEPE_REDIRECT_URL', 'https://sushrusaeclinic.com/payment/status/')
+
+# File Upload Configuration - Allow large files up to 100MB
+FILE_UPLOAD_MAX_MEMORY_SIZE = 100 * 1024 * 1024  # 100MB
+DATA_UPLOAD_MAX_MEMORY_SIZE = 100 * 1024 * 1024  # 100MB
 
 # Logging Configuration
 LOGGING = {

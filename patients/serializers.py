@@ -152,6 +152,7 @@ class MedicalRecordSerializer(serializers.ModelSerializer):
 
 class MedicalRecordCreateSerializer(serializers.ModelSerializer):
     """Serializer for creating medical records"""
+    description = serializers.CharField(required=False, allow_blank=True, default='')
     
     class Meta:
         model = MedicalRecord
@@ -162,9 +163,10 @@ class MedicalRecordCreateSerializer(serializers.ModelSerializer):
     def validate_document(self, value):
         """Validate uploaded document"""
         if value:
-            # Check file size (max 10MB)
-            if value.size > 10 * 1024 * 1024:
-                raise serializers.ValidationError("File size must be less than 10MB")
+            # Check file size (max 100MB)
+            max_size = 100 * 1024 * 1024  # 100MB
+            if value.size > max_size:
+                raise serializers.ValidationError("File size must be less than 100MB")
             
             # Check file type
             allowed_types = [
@@ -188,6 +190,38 @@ class MedicalRecordCreateSerializer(serializers.ModelSerializer):
         validated_data['patient_id'] = patient_id
         validated_data['recorded_by'] = doctor
         return super().create(validated_data)
+
+
+class BulkMedicalRecordCreateSerializer(serializers.Serializer):
+    """Serializer for creating multiple medical records at once"""
+    record_type = serializers.ChoiceField(choices=MedicalRecord.RECORD_TYPES)
+    title = serializers.CharField(max_length=200)
+    date_recorded = serializers.DateField()
+    documents = serializers.ListField(
+        child=serializers.FileField(),
+        required=True,
+        min_length=1
+    )
+    
+    def validate_documents(self, value):
+        """Validate all uploaded documents"""
+        allowed_types = [
+            'image/jpeg', 'image/jpg', 'image/png', 'image/gif',
+            'application/pdf', 'application/msword', 
+            'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+            'text/plain'
+        ]
+        
+        max_size = 100 * 1024 * 1024  # 100MB
+        for doc in value:
+            if doc.size > max_size:
+                raise serializers.ValidationError(f"File '{doc.name}' exceeds 100MB limit")
+            if doc.content_type not in allowed_types:
+                raise serializers.ValidationError(
+                    f"File '{doc.name}' has invalid type. Only JPEG, PNG, GIF, PDF, DOC, DOCX, and TXT files are allowed"
+                )
+        
+        return value
 
 
 class PatientDocumentSerializer(serializers.ModelSerializer):
@@ -229,9 +263,10 @@ class PatientDocumentUploadSerializer(serializers.ModelSerializer):
     def validate_file(self, value):
         """Validate uploaded file"""
         if value:
-            # Check file size (max 10MB)
-            if value.size > 10 * 1024 * 1024:
-                raise serializers.ValidationError("File size must be less than 10MB")
+            # Check file size (max 100MB)
+            max_size = 100 * 1024 * 1024  # 100MB
+            if value.size > max_size:
+                raise serializers.ValidationError("File size must be less than 100MB")
             
             # Check file type
             allowed_types = [

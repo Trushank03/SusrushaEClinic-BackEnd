@@ -358,7 +358,7 @@ class DoctorSlotSerializer(serializers.ModelSerializer):
         required=False, 
         allow_null=True
     )
-    clinic_name = serializers.CharField(source='clinic.name', read_only=True)
+    clinic_name = serializers.SerializerMethodField()
     
     class Meta:
         model = DoctorSlot
@@ -367,6 +367,10 @@ class DoctorSlotSerializer(serializers.ModelSerializer):
             'is_available', 'is_booked', 'booked_consultation', 'created_at', 'updated_at'
         ]
         read_only_fields = ['id', 'doctor', 'created_at', 'updated_at']
+    
+    def get_clinic_name(self, obj):
+        """Get clinic name, return 'N/A' if no clinic assigned"""
+        return obj.clinic.name if obj.clinic else 'N/A'
 
     def validate(self, data):
         """Custom validation to handle clinic field and check for duplicates"""

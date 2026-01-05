@@ -28,6 +28,9 @@ urlpatterns = [
     # Discount validation
     path('validate-discount/', views.DiscountValidationView.as_view(), name='validate-discount'),
     
+    # PhonePe specific endpoints
+    path('phonepe/callback/', views.PhonePeCallbackView.as_view(), name='phonepe-callback'),
+    
     # Include router URLs for main payment operations
     path('', include(router.urls)),
 ]

@@ -149,7 +149,7 @@ class ClinicCreateSerializer(serializers.ModelSerializer):
 
 class ClinicServiceSerializer(serializers.ModelSerializer):
     """Serializer for clinic service"""
-    clinic_name = serializers.CharField(source='clinic.name', read_only=True)
+    clinic_name = serializers.SerializerMethodField()
     
     class Meta:
         model = ClinicService
@@ -160,6 +160,10 @@ class ClinicServiceSerializer(serializers.ModelSerializer):
             'created_at', 'updated_at'
         ]
         read_only_fields = ['id', 'created_at', 'updated_at']
+    
+    def get_clinic_name(self, obj):
+        """Get clinic name, return 'N/A' if no clinic assigned"""
+        return obj.clinic.name if obj.clinic else 'N/A'
 
 
 class ClinicServiceCreateSerializer(serializers.ModelSerializer):
@@ -246,7 +250,7 @@ class GlobalMedicationSearchSerializer(serializers.ModelSerializer):
 class ClinicInventorySerializer(serializers.ModelSerializer):
     """Serializer for clinic inventory"""
     
-    clinic_name = serializers.CharField(source='clinic.name', read_only=True)
+    clinic_name = serializers.SerializerMethodField()
     global_medication_details = GlobalMedicationSerializer(source='global_medication', read_only=True)
     
     class Meta:
@@ -260,6 +264,10 @@ class ClinicInventorySerializer(serializers.ModelSerializer):
             'is_low_stock', 'is_expired', 'created_at', 'updated_at'
         ]
         read_only_fields = ['id', 'created_at', 'updated_at', 'clinic_name', 'global_medication_details']
+    
+    def get_clinic_name(self, obj):
+        """Get clinic name, return 'N/A' if no clinic assigned"""
+        return obj.clinic.name if obj.clinic else 'N/A'
 
 
 class ClinicInventoryCreateSerializer(serializers.ModelSerializer):
@@ -291,7 +299,7 @@ class ClinicAppointmentSerializer(serializers.ModelSerializer):
     """Serializer for clinic appointment"""
     patient_name = serializers.CharField(source='patient.name', read_only=True)
     doctor_name = serializers.CharField(source='doctor.name', read_only=True)
-    clinic_name = serializers.CharField(source='clinic.name', read_only=True)
+    clinic_name = serializers.SerializerMethodField()
     
     class Meta:
         model = ClinicAppointment
@@ -301,6 +309,10 @@ class ClinicAppointmentSerializer(serializers.ModelSerializer):
             'appointment_time', 'status', 'reason', 'created_at', 'updated_at'
         ]
         read_only_fields = ['id', 'created_at', 'updated_at']
+    
+    def get_clinic_name(self, obj):
+        """Get clinic name, return 'N/A' if no clinic assigned"""
+        return obj.clinic.name if obj.clinic else 'N/A'
 
 
 class ClinicAppointmentCreateSerializer(serializers.ModelSerializer):
@@ -327,7 +339,7 @@ class ClinicAppointmentCreateSerializer(serializers.ModelSerializer):
 class ClinicReviewSerializer(serializers.ModelSerializer):
     """Serializer for clinic review"""
     patient_name = serializers.CharField(source='patient.name', read_only=True)
-    clinic_name = serializers.CharField(source='clinic.name', read_only=True)
+    clinic_name = serializers.SerializerMethodField()
     
     class Meta:
         model = ClinicReview
@@ -338,6 +350,10 @@ class ClinicReviewSerializer(serializers.ModelSerializer):
             'is_anonymous', 'is_approved', 'created_at', 'updated_at'
         ]
         read_only_fields = ['id', 'patient', 'created_at', 'updated_at']
+    
+    def get_clinic_name(self, obj):
+        """Get clinic name, return 'N/A' if no clinic assigned"""
+        return obj.clinic.name if obj.clinic else 'N/A'
 
 
 class ClinicReviewCreateSerializer(serializers.ModelSerializer):
@@ -364,7 +380,7 @@ class ClinicReviewCreateSerializer(serializers.ModelSerializer):
 
 class ClinicDocumentSerializer(serializers.ModelSerializer):
     """Serializer for clinic document"""
-    clinic_name = serializers.CharField(source='clinic.name', read_only=True)
+    clinic_name = serializers.SerializerMethodField()
     uploaded_by_name = serializers.CharField(source='uploaded_by.name', read_only=True)
     
     class Meta:
@@ -375,6 +391,10 @@ class ClinicDocumentSerializer(serializers.ModelSerializer):
             'uploaded_at', 'updated_at'
         ]
         read_only_fields = ['id', 'uploaded_by', 'uploaded_at', 'updated_at']
+    
+    def get_clinic_name(self, obj):
+        """Get clinic name, return 'N/A' if no clinic assigned"""
+        return obj.clinic.name if obj.clinic else 'N/A'
 
 
 class ClinicDocumentCreateSerializer(serializers.ModelSerializer):

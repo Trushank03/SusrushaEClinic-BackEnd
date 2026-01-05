@@ -212,7 +212,7 @@ class PaymentProcessSerializer(serializers.Serializer):
     """Serializer for processing payment"""
     payment_method_id = serializers.IntegerField(required=False)
     gateway = serializers.ChoiceField(
-        choices=[('stripe', 'Stripe'), ('razorpay', 'Razorpay'), ('payu', 'PayU')],
+        choices=[('stripe', 'Stripe'), ('razorpay', 'Razorpay'), ('payu', 'PayU'), ('phonepe', 'PhonePe')],
         required=True
     )
     payment_token = serializers.CharField(max_length=500, required=False)

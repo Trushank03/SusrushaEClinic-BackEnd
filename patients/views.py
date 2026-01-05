@@ -16,7 +16,7 @@ from authentication.models import User
 from .models import PatientProfile, MedicalRecord, PatientDocument, PatientNote
 from .serializers import (
     PatientProfileSerializer, PatientProfileCreateSerializer,
-    MedicalRecordSerializer, MedicalRecordCreateSerializer,
+    MedicalRecordSerializer, MedicalRecordCreateSerializer, BulkMedicalRecordCreateSerializer,
     PatientDocumentSerializer, PatientDocumentUploadSerializer,
     PatientNoteSerializer, PatientNoteCreateSerializer,
     PatientListSerializer, PatientSearchSerializer, PatientStatsSerializer
@@ -421,6 +421,104 @@ class PatientMedicalRecordViewSet(ModelViewSet):
                 'success': False,
                 'error': {
                     'code': 'CREATE_ERROR',
+                    'message': str(e)
+                },
+                'timestamp': timezone.now().isoformat()
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+    @action(detail=False, methods=['post'], url_path='bulk')
+    def bulk_create(self, request, patient_id=None):
+        """Create multiple medical records at once with multiple file uploads"""
+        try:
+            # Check if patient exists
+            from authentication.models import User
+            patient = User.objects.filter(id=patient_id, role='patient').first()
+            if not patient:
+                return Response({
+                    'success': False,
+                    'error': {
+                        'code': 'PATIENT_NOT_FOUND',
+                        'message': 'Patient not found'
+                    },
+                    'timestamp': timezone.now().isoformat()
+                }, status=status.HTTP_404_NOT_FOUND)
+            
+            # Get files from request
+            files = request.FILES.getlist('documents')
+            if not files:
+                return Response({
+                    'success': False,
+                    'error': {
+                        'code': 'NO_FILES',
+                        'message': 'No files provided'
+                    },
+                    'timestamp': timezone.now().isoformat()
+                }, status=status.HTTP_400_BAD_REQUEST)
+            
+            # Validate file types and sizes
+            allowed_types = [
+                'image/jpeg', 'image/jpg', 'image/png', 'image/gif',
+                'application/pdf', 'application/msword', 
+                'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+                'text/plain'
+            ]
+            
+            max_size = 100 * 1024 * 1024  # 100MB
+            for doc in files:
+                if doc.size > max_size:
+                    return Response({
+                        'success': False,
+                        'error': {
+                            'code': 'FILE_TOO_LARGE',
+                            'message': f"File '{doc.name}' exceeds 100MB limit"
+                        },
+                        'timestamp': timezone.now().isoformat()
+                    }, status=status.HTTP_400_BAD_REQUEST)
+                if doc.content_type not in allowed_types:
+                    return Response({
+                        'success': False,
+                        'error': {
+                            'code': 'INVALID_FILE_TYPE',
+                            'message': f"File '{doc.name}' has invalid type. Only JPEG, PNG, GIF, PDF, DOC, DOCX, and TXT files are allowed"
+                        },
+                        'timestamp': timezone.now().isoformat()
+                    }, status=status.HTTP_400_BAD_REQUEST)
+            
+            # Get common fields
+            record_type = request.data.get('record_type', 'lab_report')
+            title = request.data.get('title', '')
+            date_recorded = request.data.get('date_recorded', timezone.now().date())
+            
+            # Create medical records for each file
+            created_records = []
+            for i, doc in enumerate(files):
+                # Generate title for each file if multiple files
+                file_title = title if len(files) == 1 else f"{title} ({i + 1})" if title else doc.name
+                
+                record = MedicalRecord.objects.create(
+                    patient=patient,
+                    record_type=record_type,
+                    title=file_title,
+                    description='',
+                    date_recorded=date_recorded,
+                    document=doc,
+                    recorded_by=request.user
+                )
+                created_records.append(record)
+            
+            response_serializer = MedicalRecordSerializer(created_records, many=True)
+            return Response({
+                'success': True,
+                'data': response_serializer.data,
+                'message': f'{len(created_records)} medical record(s) created successfully',
+                'timestamp': timezone.now().isoformat()
+            }, status=status.HTTP_201_CREATED)
+            
+        except Exception as e:
+            return Response({
+                'success': False,
+                'error': {
+                    'code': 'BULK_CREATE_ERROR',
                     'message': str(e)
                 },
                 'timestamp': timezone.now().isoformat()

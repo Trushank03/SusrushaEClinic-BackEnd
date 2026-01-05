@@ -85,7 +85,7 @@ class MedicalRecord(models.Model):
     )
     record_type = models.CharField(max_length=20, choices=RECORD_TYPES)
     title = models.CharField(max_length=200)
-    description = models.TextField()
+    description = models.TextField(blank=True, default='')
     date_recorded = models.DateField()
     
     # File attachments

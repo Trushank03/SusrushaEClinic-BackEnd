@@ -29,8 +29,13 @@ class ConsultationSerializer(serializers.ModelSerializer):
         read_only_fields = ['id', 'created_at', 'updated_at', 'is_checked_in', 'is_ready_for_consultation']
 
     def get_doctor_meeting_link(self, obj):
-        if hasattr(obj, 'doctor') and hasattr(obj.doctor, 'doctor_profile') and hasattr(obj.doctor.doctor_profile, 'meeting_link'):
-            return obj.doctor.doctor_profile.meeting_link
+        """Generate unique meeting link for each consultation"""
+        # Create a unique meeting link using doctor ID and consultation ID
+        # Format: https://meet.diracai.com/{doctor_id}/{consultation_id}
+        if hasattr(obj, 'doctor') and obj.doctor:
+            doctor_id = obj.doctor.id if hasattr(obj.doctor, 'id') else str(obj.doctor)
+            consultation_id = obj.id
+            return f"https://meet.diracai.com/{doctor_id}/{consultation_id}"
         return None
 
 
@@ -540,8 +545,8 @@ class ConsultationListSerializer(serializers.ModelSerializer):
     """Serializer for consultation list view"""
     patient_name = serializers.CharField(source='patient.name', read_only=True)
     doctor_name = serializers.CharField(source='doctor.name', read_only=True)
-    clinic_name = serializers.CharField(source='clinic.name', read_only=True)
-    clinic_id = serializers.CharField(source='clinic.id', read_only=True)
+    clinic_name = serializers.SerializerMethodField()
+    clinic_id = serializers.SerializerMethodField()
     doctor_meeting_link = serializers.SerializerMethodField(read_only=True)
     is_overdue = serializers.SerializerMethodField()
     hours_overdue = serializers.SerializerMethodField()
@@ -558,9 +563,22 @@ class ConsultationListSerializer(serializers.ModelSerializer):
         ]
         read_only_fields = ['id', 'created_at']
 
+    def get_clinic_name(self, obj):
+        """Get clinic name, return 'N/A' if no clinic assigned"""
+        return obj.clinic.name if obj.clinic else 'N/A'
+    
+    def get_clinic_id(self, obj):
+        """Get clinic ID, return None if no clinic assigned"""
+        return obj.clinic.id if obj.clinic else None
+    
     def get_doctor_meeting_link(self, obj):
-        if hasattr(obj, 'doctor') and hasattr(obj.doctor, 'doctor_profile') and hasattr(obj.doctor.doctor_profile, 'meeting_link'):
-            return obj.doctor.doctor_profile.meeting_link
+        """Generate unique meeting link for each consultation"""
+        # Create a unique meeting link using doctor ID and consultation ID
+        # Format: https://meet.diracai.com/{doctor_id}/{consultation_id}
+        if hasattr(obj, 'doctor') and obj.doctor:
+            doctor_id = obj.doctor.id if hasattr(obj.doctor, 'id') else str(obj.doctor)
+            consultation_id = obj.id
+            return f"https://meet.diracai.com/{doctor_id}/{consultation_id}"
         return None
     
     def get_is_overdue(self, obj):
@@ -724,6 +742,9 @@ class ConsultationDetailSerializer(serializers.ModelSerializer):
     doctor_specialty = serializers.SerializerMethodField(read_only=True)
     doctor_meeting_link = serializers.SerializerMethodField(read_only=True)
     
+    clinic_name = serializers.SerializerMethodField()
+    clinic_id = serializers.SerializerMethodField()
+    
     recorded_symptoms = ConsultationSymptomSerializer(many=True, read_only=True)
     diagnoses = ConsultationDiagnosisSerializer(many=True, read_only=True)
     vital_signs = serializers.SerializerMethodField(read_only=True)
@@ -735,7 +756,8 @@ class ConsultationDetailSerializer(serializers.ModelSerializer):
     class Meta:
         model = Consultation
         fields = [
-            'id', 'patient', 'doctor', 'patient_name', 'patient_phone', 'patient_email', 'patient_age', 'patient_gender',
+            'id', 'patient', 'doctor', 'clinic', 'clinic_name', 'clinic_id',
+            'patient_name', 'patient_phone', 'patient_email', 'patient_age', 'patient_gender',
             'doctor_name', 'doctor_phone', 'doctor_email', 'doctor_specialty',
             'consultation_type', 'scheduled_date', 'scheduled_time', 'duration',
             'chief_complaint', 'symptoms', 'status',
@@ -750,6 +772,14 @@ class ConsultationDetailSerializer(serializers.ModelSerializer):
             'doctor_meeting_link',
         ]
         read_only_fields = ['id', 'created_at', 'updated_at']
+    
+    def get_clinic_name(self, obj):
+        """Get clinic name, return 'N/A' if no clinic assigned"""
+        return obj.clinic.name if obj.clinic else 'N/A'
+    
+    def get_clinic_id(self, obj):
+        """Get clinic ID, return None if no clinic assigned"""
+        return obj.clinic.id if obj.clinic else None
     
     def get_patient_age(self, obj):
         """Get patient age from date of birth"""
@@ -774,10 +804,14 @@ class ConsultationDetailSerializer(serializers.ModelSerializer):
         return "General Medicine"
     
     def get_doctor_meeting_link(self, obj):
-        """Generate meeting link for doctor"""
-        if hasattr(obj.doctor, 'doctor_profile') and obj.doctor.doctor_profile.meeting_link:
-            return obj.doctor.doctor_profile.meeting_link
-        return f"https://meet.google.com/{obj.id}-{obj.doctor.id}"
+        """Generate unique meeting link for each consultation"""
+        # Create a unique meeting link using doctor ID and consultation ID
+        # Format: https://meet.diracai.com/{doctor_id}/{consultation_id}
+        if hasattr(obj, 'doctor') and obj.doctor:
+            doctor_id = obj.doctor.id if hasattr(obj.doctor, 'id') else str(obj.doctor)
+            consultation_id = obj.id
+            return f"https://meet.diracai.com/{doctor_id}/{consultation_id}"
+        return None
     
     def get_prescription_data(self, obj):
         """Get prescription data for the consultation"""
@@ -824,10 +858,14 @@ class ConsultationReceiptSerializer(serializers.ModelSerializer):
     consultation_id = serializers.CharField(source='consultation.id', read_only=True)
     patient_name = serializers.CharField(source='consultation.patient.name', read_only=True)
     doctor_name = serializers.CharField(source='consultation.doctor.name', read_only=True)
-    clinic_name = serializers.CharField(source='consultation.clinic.name', read_only=True)
+    clinic_name = serializers.SerializerMethodField()
     issued_by_name = serializers.CharField(source='issued_by.name', read_only=True)
     formatted_amount = serializers.CharField(read_only=True)
     receipt_data = serializers.JSONField(read_only=True)
+    
+    def get_clinic_name(self, obj):
+        """Get clinic name, return 'N/A' if no clinic assigned"""
+        return obj.consultation.clinic.name if obj.consultation.clinic else 'N/A'
     
     class Meta:
         model = ConsultationReceipt
