@@ -108,3 +108,33 @@ def upload_files_sync(clinic_id):
                     
     except Exception as e:
         print(f"❌ [SYNC] Error in upload_files_sync: {e}") 
+
+# Signal to auto-assign patient to clinic when consultation is created
+from consultations.models import Consultation
+from .models import ClinicPatient
+
+@receiver(post_save, sender=Consultation)
+def auto_assign_patient_to_clinic(sender, instance, created, **kwargs):
+    """
+    Automatically assign patient to clinic when a consultation is created.
+    This ensures patients who book consultations are registered to the clinic.
+    """
+    if created and instance.clinic and instance.patient:
+        try:
+            # Check if patient is already registered to this clinic
+            existing = ClinicPatient.objects.filter(
+                clinic=instance.clinic,
+                patient=instance.patient
+            ).exists()
+            
+            if not existing:
+                ClinicPatient.objects.create(
+                    clinic=instance.clinic,
+                    patient=instance.patient,
+                    registration_source='consultation',
+                    registered_by=None,  # Auto-registered via consultation
+                    is_active=True
+                )
+                print(f"✅ Auto-registered patient {instance.patient.id} to clinic {instance.clinic.id} via consultation")
+        except Exception as e:
+            print(f"❌ Error auto-registering patient to clinic: {e}")

@@ -526,8 +526,10 @@ class AdminUserManagementView(APIView):
             
             # Create patient profile if role is patient
             patient_profile = None
+            clinic_patient = None
             if user.role == 'patient':
                 from patients.models import PatientProfile
+                from eclinic.models import ClinicPatient
                 
                 patient_data = {
                     'user': user,
@@ -542,18 +544,39 @@ class AdminUserManagementView(APIView):
                 }
                 
                 patient_profile = PatientProfile.objects.create(**patient_data)
+                
+                # Auto-assign patient to admin's clinic
+                if request.user.role == 'admin':
+                    try:
+                        admin_clinic = request.user.administered_clinic
+                        clinic_patient, _ = ClinicPatient.register_patient_to_clinic(
+                            patient=user,
+                            clinic=admin_clinic,
+                            registered_by=request.user,
+                            source='admin_created'
+                        )
+                    except Exception as clinic_error:
+                        # Log but don't fail if clinic assignment fails
+                        print(f"Warning: Could not assign patient to clinic: {clinic_error}")
+            
+            response_data = {
+                'user_id': user.id,
+                'phone': user.phone,
+                'name': user.name,
+                'role': user.role,
+                'email': user.email,
+                'password': password if not request.data.get('password') else '***',
+                'patient_profile': patient_profile.id if patient_profile else None
+            }
+            
+            # Add clinic info if patient was assigned to a clinic
+            if clinic_patient:
+                response_data['clinic_id'] = clinic_patient.clinic.id
+                response_data['clinic_name'] = clinic_patient.clinic.name
             
             return Response({
                 'success': True,
-                'data': {
-                    'user_id': user.id,
-                    'phone': user.phone,
-                    'name': user.name,
-                    'role': user.role,
-                    'email': user.email,
-                    'password': password if not request.data.get('password') else '***',
-                    'patient_profile': patient_profile.id if patient_profile else None
-                },
+                'data': response_data,
                 'message': f'{user.get_role_display()} account created successfully',
                 'timestamp': timezone.now().isoformat()
             }, status=status.HTTP_201_CREATED)

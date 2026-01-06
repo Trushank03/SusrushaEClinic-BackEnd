@@ -345,6 +345,9 @@ class PatientListSerializer(serializers.ModelSerializer):
     profile_updated_at = serializers.SerializerMethodField()
     has_profile = serializers.SerializerMethodField()
     
+    # Clinic information
+    clinics = serializers.SerializerMethodField()
+    
     class Meta:
         model = User
         fields = [
@@ -355,7 +358,7 @@ class PatientListSerializer(serializers.ModelSerializer):
             'medical_history', 'is_active', 'is_verified',
             'profile_id', 'blood_group', 'allergies', 'chronic_conditions', 'current_medications',
             'preferred_language', 'profile_is_active', 'profile_created_at', 'profile_updated_at',
-            'total_consultations', 'last_consultation_date', 'has_profile'
+            'total_consultations', 'last_consultation_date', 'has_profile', 'clinics'
         ]
     
     def get_age(self, obj):
@@ -416,6 +419,24 @@ class PatientListSerializer(serializers.ModelSerializer):
         if last_consultation:
             return last_consultation.created_at
         return None
+    
+    def get_clinics(self, obj):
+        """Get list of clinics this patient is registered to"""
+        from eclinic.models import ClinicPatient
+        clinic_patients = ClinicPatient.objects.filter(
+            patient=obj,
+            is_active=True
+        ).select_related('clinic')
+        
+        return [
+            {
+                'clinic_id': cp.clinic.id,
+                'clinic_name': cp.clinic.name,
+                'registered_at': cp.registered_at,
+                'registration_source': cp.registration_source
+            }
+            for cp in clinic_patients
+        ]
 
 
 class PatientSearchSerializer(serializers.Serializer):

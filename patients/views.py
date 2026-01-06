@@ -23,6 +23,7 @@ from .serializers import (
 )
 from consultations.models import Consultation
 from consultations.serializers import ConsultationListSerializer
+from eclinic.models import ClinicPatient
 
 
 class PatientPagination(PageNumberPagination):
@@ -132,9 +133,29 @@ class PatientProfileViewSet(ModelViewSet):
             return queryset.filter(
                 patient_consultations__doctor=user
             ).distinct()
-        elif user.role in ['admin', 'superadmin']:
-            # Admins can see all patients (with or without profiles, active or inactive)
-            pass
+        elif user.role == 'admin':
+            # Admin can only see patients registered to their clinic
+            try:
+                clinic = user.administered_clinic
+                # Get patient IDs registered to this clinic
+                clinic_patient_ids = ClinicPatient.objects.filter(
+                    clinic=clinic,
+                    is_active=True
+                ).values_list('patient_id', flat=True)
+                queryset = queryset.filter(id__in=clinic_patient_ids)
+            except Exception:
+                # If admin has no clinic, return empty
+                return queryset.none()
+        elif user.role == 'superadmin':
+            # Superadmin can see all patients
+            # Apply clinic filter if specified (for superadmin only)
+            clinic_id = self.request.query_params.get('clinic')
+            if clinic_id:
+                clinic_patient_ids = ClinicPatient.objects.filter(
+                    clinic_id=clinic_id,
+                    is_active=True
+                ).values_list('patient_id', flat=True)
+                queryset = queryset.filter(id__in=clinic_patient_ids)
         else:
             return queryset.none()
         
@@ -207,6 +228,7 @@ class PatientProfileViewSet(ModelViewSet):
             OpenApiParameter('gender', OpenApiTypes.STR, description='Filter by gender'),
             OpenApiParameter('age_min', OpenApiTypes.INT, description='Minimum age'),
             OpenApiParameter('age_max', OpenApiTypes.INT, description='Maximum age'),
+            OpenApiParameter('clinic', OpenApiTypes.STR, description='Filter by clinic ID (superadmin only)'),
         ],
         responses={200: PatientListSerializer(many=True)},
         description="List all patients with pagination and filtering - now includes patients without PatientProfile"
@@ -925,6 +947,7 @@ class PatientSearchView(APIView):
             OpenApiParameter('age_max', OpenApiTypes.INT, description='Maximum age'),
             OpenApiParameter('city', OpenApiTypes.STR, description='City filter'),
             OpenApiParameter('state', OpenApiTypes.STR, description='State filter'),
+            OpenApiParameter('clinic', OpenApiTypes.STR, description='Filter by clinic ID (superadmin only)'),
             OpenApiParameter('is_active', OpenApiTypes.BOOL, description='Filter by active status (true/false). If not specified, shows both active and inactive patients.'),
             OpenApiParameter('has_profile', OpenApiTypes.BOOL, description='Filter by profile existence (true/false). If not specified, shows all patients with or without profiles.'),
         ],
@@ -954,7 +977,35 @@ class PatientSearchView(APIView):
             queryset = queryset.filter(
                 patient_consultations__doctor=user
             ).distinct()
-        elif user.role not in ['admin', 'superadmin']:
+        elif user.role == 'admin':
+            # Admin can only see patients registered to their clinic
+            try:
+                clinic = user.administered_clinic
+                # Get patient IDs registered to this clinic
+                clinic_patient_ids = ClinicPatient.objects.filter(
+                    clinic=clinic,
+                    is_active=True
+                ).values_list('patient_id', flat=True)
+                queryset = queryset.filter(id__in=clinic_patient_ids)
+            except Exception:
+                # If admin has no clinic, return empty
+                return Response({
+                    'success': True,
+                    'data': [],
+                    'message': 'No patients found - admin has no assigned clinic',
+                    'timestamp': timezone.now().isoformat()
+                }, status=status.HTTP_200_OK)
+        elif user.role == 'superadmin':
+            # Superadmin can see all patients
+            # Apply clinic filter if specified (for superadmin only)
+            clinic_id = request.query_params.get('clinic')
+            if clinic_id:
+                clinic_patient_ids = ClinicPatient.objects.filter(
+                    clinic_id=clinic_id,
+                    is_active=True
+                ).values_list('patient_id', flat=True)
+                queryset = queryset.filter(id__in=clinic_patient_ids)
+        else:
             return Response({
                 'success': False,
                 'error': {
